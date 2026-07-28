@@ -1,0 +1,36 @@
+# Task
+Given the following query-conditioned memory window, produce a sequence of local editing decisions.
+
+# Required Output
+Return only a JSON array with the following structure:
+[
+  {{
+    "op": "KEEP | DROP",
+    "compressed_content": "empty string if DROP; otherwise retained content in one KEEP style: verbatim keeping, key-span extraction, or concise compression",
+    "reason": "brief local reason"
+  }}
+]
+
+# Local Editing Rules
+1. The output array must contain one decision for every non-empty role message in previous_bridge, core_messages, and next_bridge.
+2. The decisions must follow the original chronological order: previous_bridge, then core_messages, then next_bridge.
+3. Each decision must contain exactly three fields: op, compressed_content, and reason.
+4. op must be either KEEP or DROP.
+5. KEEP means preserving dialogue content that is relevant to the query and useful for the main model to answer the question.
+6. DROP means the message is locally irrelevant and should not enter the final memory.
+7. For KEEP, choose the most appropriate retention style for each message:
+   - verbatim keeping: keep the original message text when it is short and directly useful;
+   - key-span extraction: keep only the query-relevant span when only part of the message is relevant;
+   - concise compression: faithfully rewrite the message into a shorter form when it is useful but too long, or only partially relevant.
+8. For any KEEP style, remain faithful to the source meaning and do not introduce unsupported facts.
+9. If the whole window is irrelevant, still output one decision for every non-empty role message, and set every op to DROP.
+10. When op is DROP, compressed_content must be an empty string.
+11. If a message may contain answer evidence, user facts, temporal updates, or content related to the query entity/attribute, prefer KEEP even when relevance is uncertain.
+12. Return only the JSON array. Do not output markdown, comments, or extra text.
+13. The output must be directly parseable by json.loads().
+
+# Query
+{query_time and query}
+
+# History Window
+{window}

@@ -1,0 +1,7 @@
+# Dependencies for ingestion, retrieval, annotation, and evaluation utilities.
+openai==2.36.0
+requests==2.33.1
+tqdm==4.67.3
+qdrant-client
+rank-bm25
+sentence-transformers

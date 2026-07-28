@@ -1,0 +1,61 @@
+# Train and validate the Qwen3-4B LazyMem editor with full-parameter SFT.
+
+### model
+model_name_or_path: Qwen/Qwen3-4B
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+do_eval: true
+finetuning_type: full
+deepspeed: sft/configs/ds_z2_config.json
+
+### dataset
+dataset_dir: outputs/data/sft
+dataset: lazymem_window_dft_train100_balanced
+eval_dataset: lazymem_window_dft_val_balanced
+template: qwen3
+enable_thinking: true
+cutoff_len: 8192
+overwrite_cache: true
+preprocessing_num_workers: 16
+packing: false
+
+### output
+output_dir: outputs/sft/lazymem-qwen4b
+logging_dir: outputs/sft/lazymem-qwen4b/runs
+run_name: qwen4b-lazymem-train100-balanced-ds2
+logging_steps: 5
+save_steps: 50
+eval_steps: 50
+plot_loss: true
+overwrite_output_dir: false
+save_total_limit: 5
+save_safetensors: true
+save_only_model: true
+report_to: tensorboard
+load_best_model_at_end: false
+metric_for_best_model: eval_loss
+greater_is_better: false
+
+### train
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 5.0e-6
+num_train_epochs: 2.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+weight_decay: 0.1
+max_grad_norm: 1.0
+bf16: true
+ddp_timeout: 180000000
+gradient_checkpointing: true
+flash_attn: fa2
+
+### eval
+val_size: 0.0
+eval_strategy: steps
+save_strategy: steps
+early_stopping_steps: 3

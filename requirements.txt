@@ -1,0 +1,3 @@
+# Install the verified training and data-pipeline dependency sets.
+-r requirements/train.txt
+-r requirements/pipeline.txt

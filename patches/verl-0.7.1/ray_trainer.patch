@@ -1,0 +1,159 @@
+--- a/verl/trainer/ppo/ray_trainer.py
++++ b/verl/trainer/ppo/ray_trainer.py
+@@ -22,0 +23 @@
++import time
+@@ -625,0 +627,86 @@
++
++    def _train_reward_metrics_update(self, reward_extra_infos_dict):
++        metric_dict = {}
++
++        def _values(name):
++            vals = reward_extra_infos_dict.get(name, [])
++            if len(vals) == 0:
++                return None
++            try:
++                arr = np.asarray(vals, dtype=np.float64)
++            except (TypeError, ValueError):
++                return None
++            arr = arr[np.isfinite(arr)]
++            return arr if arr.size else None
++
++        mean_keys = (
++            "score",
++            "acc",
++            "g_format",
++            "R_action",
++            "R_judge",
++            "R_length",
++            "raw_inside_gate",
++            "inside_gate_score",
++            "raw_inside_gate_normalized",
++            "score_norm_enabled",
++            "score_norm_scale",
++            "lambda_act",
++            "lambda_judge",
++            "lambda_len",
++            "judge_enabled",
++            "phase_is_judge",
++            "judge_gate_gold_drop_rate",
++            "judge_gate_threshold",
++            "eval_gold_drop_rate",
++            "R_gold",
++            "R_other",
++            "action_reward_gold_drop",
++            "action_reward_other_keep",
++            "gold_drop_gap",
++            "other_keep_gap",
++            "faithfulness",
++            "utility",
++            "constructed_memory_chars",
++            "keep_rate",
++            "over_keep",
++        )
++        count_keys = (
++            "gold_count",
++            "other_count",
++            "gold_keep_count",
++            "gold_drop_count",
++            "other_keep_count",
++            "other_drop_count",
++        )
++
++        for key in mean_keys:
++            arr = _values(key)
++            if arr is not None:
++                metric_dict[f"train-reward/{key}/mean"] = float(np.mean(arr))
++
++        for key in count_keys:
++            arr = _values(key)
++            if arr is not None:
++                metric_dict[f"train-reward/{key}/mean"] = float(np.mean(arr))
++                metric_dict[f"train-reward/{key}/sum"] = float(np.sum(arr))
++
++        ratio_specs = (
++            ("gold_keep_rate", "gold_keep_count", "gold_count"),
++            ("gold_drop_rate", "gold_drop_count", "gold_count"),
++            ("other_keep_rate", "other_keep_count", "other_count"),
++            ("other_drop_rate", "other_drop_count", "other_count"),
++        )
++        for rate_name, num_name, den_name in ratio_specs:
++            num = _values(num_name)
++            den = _values(den_name)
++            if num is None or den is None:
++                continue
++            num_sum = float(np.sum(num))
++            den_sum = float(np.sum(den))
++            metric_dict[f"train-reward/{rate_name}"] = num_sum / den_sum if den_sum != 0.0 else 0.0
++            raw_rate = _values(rate_name)
++            if raw_rate is not None:
++                valid_rate = raw_rate[raw_rate >= 0.0]
++                if valid_rate.size:
++                    metric_dict[f"train-reward/{rate_name}/sample_mean"] = float(np.mean(valid_rate))
+@@ -626,0 +714,2 @@
++        return metric_dict
++
+@@ -651,0 +741,61 @@
++        metrics_path = os.getenv("LAZYMEM_ACTIVE_RL_EVAL_METRICS_PATH")
++        write_global = os.getenv("LAZYMEM_ACTIVE_RL_WRITE_GLOBAL_EVAL_METRICS", "1").strip().lower() not in {
++            "0",
++            "false",
++            "no",
++            "off",
++        }
++        if metrics_path and write_global:
++            def _sum_metric(name):
++                vals = reward_extra_infos_dict.get(name, [])
++                return float(np.sum(np.asarray(vals, dtype=np.float64))) if len(vals) else 0.0
++
++            def _mean_metric(name):
++                vals = reward_extra_infos_dict.get(name, [])
++                return float(np.mean(np.asarray(vals, dtype=np.float64))) if len(vals) else 0.0
++
++            def _safe_div(num, den):
++                return float(num) / float(den) if float(den) != 0.0 else 0.0
++
++            gold_keep = _sum_metric("gold_keep_count")
++            gold_drop = _sum_metric("gold_drop_count")
++            other_keep = _sum_metric("other_keep_count")
++            other_drop = _sum_metric("other_drop_count")
++            gold_count = _sum_metric("gold_count")
++            other_count = _sum_metric("other_count")
++            score_name = "score" if "score" in reward_extra_infos_dict else "reward"
++            eval_g_format = _mean_metric("g_format")
++            flat_sources = [str(x) for x in np.asarray(data_sources).reshape(-1).tolist()]
++            row = {
++                "time": time.time(),
++                "pid": os.getpid(),
++                "source": "verl_global_validation",
++                "split": "val",
++                "step": int(getattr(self, "global_steps", -1)),
++                "samples": int(len(data_sources)),
++                "data_sources": sorted(set(flat_sources)),
++                "score": _mean_metric(score_name),
++                "eval_g_format": eval_g_format,
++                "g_format": eval_g_format,
++                "eval_gold_keep_rate": _safe_div(gold_keep, gold_count),
++                "eval_gold_drop_rate": _safe_div(gold_drop, gold_count),
++                "eval_other_keep_rate": _safe_div(other_keep, other_count),
++                "eval_other_drop_rate": _safe_div(other_drop, other_count),
++                "gold_keep_rate": _safe_div(gold_keep, gold_count),
++                "gold_drop_rate": _safe_div(gold_drop, gold_count),
++                "other_keep_rate": _safe_div(other_keep, other_count),
++                "other_drop_rate": _safe_div(other_drop, other_count),
++                "gold_keep_count": gold_keep,
++                "gold_drop_count": gold_drop,
++                "other_keep_count": other_keep,
++                "other_drop_count": other_drop,
++                "gold_count": gold_count,
++                "other_count": other_count,
++            }
++            try:
++                os.makedirs(os.path.dirname(metrics_path) or ".", exist_ok=True)
++                with open(metrics_path, "a", encoding="utf-8") as f:
++                    f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
++            except OSError as exc:
++                print(f"WARNING: failed to append global validation metrics to {metrics_path}: {exc}")
++
+@@ -1386,0 +1537,2 @@
++                        if reward_extra_infos_dict:
++                            metrics.update(self._train_reward_metrics_update(reward_extra_infos_dict))

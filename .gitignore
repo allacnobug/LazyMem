@@ -1,0 +1,45 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime outputs
+outputs/
+logs/
+cache*/
+checkpoints/
+merged_models/
+validation_dumps/
+latency_runs/
+tensorboard_log/
+eval_metrics/
+*.phase2_latched.json
+*.pid
+*.status
+*.log
+
+# Data and model artifacts
+data/
+*.jsonl
+*.parquet
+*.arrow
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Historical and editor files
+*.bak*
+*.pre_*
+*.failed_*
+.DS_Store
+.idea/
+.vscode/

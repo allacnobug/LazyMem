@@ -1,0 +1,28 @@
+--- a/verl/trainer/ppo/metric_utils.py
++++ b/verl/trainer/ppo/metric_utils.py
+@@ -656,4 +656,25 @@
+         for var_name, metric2uid_vals in var2metric2uid_vals.items():
+             for metric_name, uid_vals in metric2uid_vals.items():
+                 data_src2var2metric2val[data_source][var_name][metric_name] = np.mean(uid_vals)
++    ratio_specs = (
++        ("gold_keep_rate", "gold_keep_count", "gold_count"),
++        ("gold_drop_rate", "gold_drop_count", "gold_count"),
++        ("other_keep_rate", "other_keep_count", "other_count"),
++        ("other_drop_rate", "other_drop_count", "other_count"),
++    )
++    for data_source, var2metric2val in data_src2var2metric2val.items():
++        for rate_name, num_name, den_name in ratio_specs:
++            num_metrics = var2metric2val.get(num_name, {})
++            den_metrics = var2metric2val.get(den_name, {})
++            if not num_metrics or not den_metrics:
++                continue
++            rate_metrics = var2metric2val.setdefault(rate_name, {})
++            for metric_name, num_val in num_metrics.items():
++                if not metric_name.startswith("mean@"):
++                    continue
++                den_val = den_metrics.get(metric_name)
++                if den_val is None:
++                    continue
++                rate_metrics[metric_name] = float(num_val) / float(den_val) if float(den_val) != 0.0 else 0.0
++
+     return data_src2var2metric2val
