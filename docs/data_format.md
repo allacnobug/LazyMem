@@ -1,7 +1,8 @@
 # Data layout
 
-Datasets are intentionally not included. Scripts accept explicit CLI paths;
-their relative defaults use the following local layout:
+The curated SFT train/validation files are included under `sft/data/`.
+Raw benchmark datasets and generated RL data are not included. Scripts accept
+explicit CLI paths; their relative defaults use the following local layout:
 
 ```text
 data/

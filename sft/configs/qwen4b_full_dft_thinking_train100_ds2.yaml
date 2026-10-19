@@ -12,7 +12,7 @@ finetuning_type: full
 deepspeed: sft/configs/ds_z2_config.json
 
 ### dataset
-dataset_dir: outputs/data/sft
+dataset_dir: sft/data
 dataset: lazymem_window_dft_train100_balanced
 eval_dataset: lazymem_window_dft_val_balanced
 template: qwen3

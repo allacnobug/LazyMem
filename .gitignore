@@ -27,6 +27,12 @@ eval_metrics/
 
 # Data and model artifacts
 data/
+# Release only the curated SFT train/validation files.
+!sft/data/
+sft/data/*
+!sft/data/dataset_info.json
+!sft/data/lazymem_sft_train.json
+!sft/data/lazymem_sft_val.json
 *.jsonl
 *.parquet
 *.arrow

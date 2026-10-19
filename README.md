@@ -16,7 +16,8 @@ current query.
 
 The released code covers message ingestion, hybrid retrieval, history
 windowing, teacher annotation, supervised fine-tuning (SFT), GRPO training, and
-downstream QA evaluation. Datasets, model weights, generated annotations,
+downstream QA evaluation. The curated SFT train/validation data are included.
+Raw benchmark datasets, model weights, other generated annotations,
 checkpoints, caches, and experiment outputs are not included.
 
 ## Method overview
@@ -143,7 +144,7 @@ remaining dependence on candidate recall and the frozen answer model.
 ├── requirements/    # Pipeline and training dependencies
 ├── retrieval/       # Qdrant ingestion, experiment-15 retrieval, ripple eval
 ├── scripts/         # VERL patching and reward-judge serving
-├── sft/             # LLaMA-Factory configuration and SFT validation
+├── sft/             # Released SFT data, LLaMA-Factory configuration and validation
 └── tests/           # Reward and QA-prompt regression tests
 ```
 
@@ -203,9 +204,10 @@ tokens.
 
 ## Data
 
-Download LongMemEval and LoCoMo from their official releases. Keep benchmark
-data outside Git; the repository ignores `data/` and all generated artifacts.
-A convenient local layout is:
+Download LongMemEval and LoCoMo from their official releases. Keep raw benchmark
+data outside Git; the repository ignores `data/` and generated artifacts. The
+curated SFT files under `sft/data/` are the only released data files. A
+convenient local layout for the raw benchmarks is:
 
 ```text
 data/
@@ -225,6 +227,22 @@ The paper uses a type-stratified LongMemEval split of 360/40/100
 train/validation/test questions with seed 42. The test split must not be used
 for annotation, training, hyperparameter selection, or checkpoint selection.
 See [`docs/data_format.md`](docs/data_format.md) for the VERL reward fields.
+
+### Released SFT data
+
+| File | Rows | Questions | Purpose |
+|---|---:|---:|---|
+| [`sft/data/lazymem_sft_train.json`](sft/data/lazymem_sft_train.json) | 776 | 100 training questions | Balanced SFT training set |
+| [`sft/data/lazymem_sft_val.json`](sft/data/lazymem_sft_val.json) | 304 | 40 validation questions | SFT validation set |
+
+Each file is a JSON array of ShareGPT-style records. A record contains
+`messages` (system, user, assistant) and `metadata`; the assistant message is
+the target memory-editing output. The files were prepared from LongMemEval
+history windows using DeepSeek-V4-Flash teacher annotations. They contain no
+test-split questions. `sft/data/dataset_info.json` registers both files for
+LLaMA-Factory, and `sft/configs/qwen4b_full_dft_thinking_train100_ds2.yaml`
+reads them directly from `sft/data/`. The dataset names in that configuration
+are registry keys; the file names above are the renamed release artifacts.
 
 ## External services
 
@@ -350,23 +368,19 @@ python data_pipeline/annotate_windows.py build-inputs \
   --output outputs/data/window_annotation_inputs.jsonl
 ```
 
-Run the teacher in thinking mode:
-
-```bash
-# Start this in a separate terminal and keep it running for Phase 2.
-export JUDGE_MODEL_PATH=/path/to/Qwen3-32B
-export JUDGE_GPU=0
-bash scripts/serve_judge.sh
-```
+The released SFT files were annotated by `deepseek-v4-flash` in thinking mode.
+Set `LAZYMEM_TEACHER_API_KEY` for the teacher endpoint before running either
+annotation command. The Qwen3-32B service used for GRPO rewards is started in
+step 5.
 
 ```bash
 python data_pipeline/annotate_windows.py annotate \
   --input outputs/data/window_annotation_inputs.jsonl \
   --output outputs/data/window_annotations.jsonl \
   --error-output outputs/data/window_annotation_errors.jsonl \
-  --base-url http://127.0.0.1:8022/v1 \
-  --model qwen-32b \
-  --thinking \
+  --base-url https://api.deepseek.com/v1 \
+  --model deepseek-v4-flash \
+  --extra-body-json '{"thinking":{"type":"enabled"}}' \
   --max-tokens 4096 \
   --resume
 ```
@@ -401,9 +415,9 @@ python data_pipeline/annotate_windows.py annotate \
   --input outputs/data/window_annotation_inputs_val.jsonl \
   --output outputs/data/window_annotations_val.jsonl \
   --error-output outputs/data/window_annotation_errors_val.jsonl \
-  --base-url http://127.0.0.1:8022/v1 \
-  --model qwen-32b \
-  --thinking \
+  --base-url https://api.deepseek.com/v1 \
+  --model deepseek-v4-flash \
+  --extra-body-json '{"thinking":{"type":"enabled"}}' \
   --max-tokens 4096 \
   --resume
 
@@ -416,11 +430,14 @@ python data_pipeline/prepare_window_dft_llamafactory_data.py \
   --private-windows data/processed/top50_ctx2_windows_private.jsonl \
   --output-dir outputs/data/sft \
   --dataset-name lazymem_window_dft_val_balanced \
-  --mode all \
+  --mode balanced-train \
   --overwrite
 ```
 
-Then run SFT:
+The preparation commands write regenerated files under `outputs/data/sft`.
+The checked-in training configuration uses the released files under
+`sft/data`; to train on regenerated files instead, override its `dataset_dir`.
+To train on the released files, run:
 
 ```bash
 llamafactory-cli train \
@@ -429,9 +446,8 @@ llamafactory-cli train \
 
 ### 5. Start the shared Qwen3-32B service
 
-One OpenAI-compatible Qwen3-32B service is shared by teacher annotation,
-offline reasoning-evidence generation, and the online Phase-2 quality reward.
-If the service started above is no longer running, restart it with:
+One OpenAI-compatible Qwen3-32B service is shared by offline reasoning-evidence
+generation and the online Phase-2 quality reward. Start it with:
 
 ```bash
 export JUDGE_MODEL_PATH=/path/to/Qwen3-32B
@@ -588,10 +604,11 @@ single-file QA-prompt generation.
 
 ## Reproducibility notes
 
-- The repository intentionally contains no benchmark data, proprietary
-  annotations, API credentials, model weights, or experiment outputs.
-- All generated artifacts are written under `data/` or `outputs/`, both ignored
-  by Git.
+- The repository includes the curated LongMemEval SFT train/validation files
+  under `sft/data/`. Raw benchmark data, other generated annotations, API
+  credentials, model weights, and experiment outputs are excluded.
+- Generated pipeline artifacts are written under `data/` or `outputs/`, both
+  ignored by Git.
 - SFT and RL use only LongMemEval training/validation data. LoCoMo is test-only.
 - Experiment 15 uses raw-query dense and sparse retrieval; there is no QU stage.
 - Invalidly formatted rollouts receive zero reward and never call the LLM judge.
